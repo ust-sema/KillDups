@@ -5,10 +5,11 @@ namespace KillDups
 {
     public partial class FormMain : Form
     {
-        static List<FileInfo> files = new List<FileInfo>();  
+        static List<FileInfo> files = new List<FileInfo>();
         static List<Tuple<FileInfo, string, int>> dupes = new List<Tuple<FileInfo, string, int>>();
         static string tick = "";
         const string formHeader = "Find and delete duplicate files";
+        static readonly string[] suffixes = { "Bytes", "KB", "MB", "GB", "TB", "PB" };
 
         public FormMain()
         {
@@ -22,6 +23,7 @@ namespace KillDups
             if (folderBrowserDialog1.SelectedPath != null)
             {
                 textBoxFolder.Text = folderBrowserDialog1.SelectedPath;
+                ClearGrid();
             }
         }
 
@@ -38,13 +40,21 @@ namespace KillDups
             }
             catch
             {
-                return;
+
             }
 
-            foreach (DirectoryInfo d in dir.GetDirectories())
+            try
             {
-                FullDirList(d, searchPattern);
+                foreach (DirectoryInfo d in dir.GetDirectories())
+                {
+                    FullDirList(d, searchPattern);
+                }
             }
+            catch (Exception)
+            {
+
+            }
+
         }
 
         void ProcessFiles()
@@ -126,13 +136,13 @@ namespace KillDups
         private void buttonDeDup_Click(object sender, EventArgs e)
         {
             EnableUI(false);
+            ClearGrid();
             backgroundWorkerScan.RunWorkerAsync();
         }
 
         void FillGrid()
         {
-            dataGridViewFiles.Rows.Clear();
-            pictureBoxPreview.Image = null;
+            ClearGrid();
 
             var group = 0;
             var mark = false;
@@ -151,6 +161,13 @@ namespace KillDups
                 var row = new object[] { mark, d.Item1.FullName, d.Item1.Length, d.Item3, d.Item2 };
                 dataGridViewFiles.Rows.Add(row);
             });
+        }
+
+        void ClearGrid()
+        {
+            dataGridViewFiles.Rows.Clear();
+            pictureBoxPreview.Image = null;
+            labelDupes.Text = "";
         }
 
         private void dataGridViewFiles_SelectionChanged(object sender, EventArgs e)
@@ -184,9 +201,11 @@ namespace KillDups
 
             if (rows2delete == 0) return;
 
+
             if (MessageBox.Show($"Are you sure to delete {rows2delete} selected files?", "Warning", MessageBoxButtons.YesNo) == DialogResult.Yes)
             {
                 var deleted = 0;
+                pictureBoxPreview.Image = null;
 
                 foreach (var row in dataGridViewFiles.Rows)
                 {
@@ -210,6 +229,7 @@ namespace KillDups
                 log.AppendLine("Finished.");
                 logView.SetLogText(log.ToString(), $"Deleted files: {deleted}, errors: {errors}");
                 logView.Show();
+                ClearGrid();
             }
         }
 
@@ -228,7 +248,10 @@ namespace KillDups
         private void backgroundWorkerScan_RunWorkerCompleted(object sender, System.ComponentModel.RunWorkerCompletedEventArgs e)
         {
             progressBar1.Value = 0;
-            labelDupes.Text = $"Duplicate files: {dupes.Count}";
+
+            var sum = dupes.Sum(d => d.Item1.Length);
+            labelDupes.Text = $"Duplicate files: {dupes.Count}, size: {FormatSize(sum / 2)}";
+
             FillGrid();
             EnableUI(true);
         }
@@ -268,6 +291,18 @@ namespace KillDups
             labelPercent.Text = $"{progressBar1.Value}%{tick}";
             tick += ".";
             if (tick.Length > 3) tick = "";
+        }
+
+        static string FormatSize(long size)
+        {
+            var i = (decimal)size;
+            int j = 0;
+            while ((long)i / 1024 > 0)
+            {
+                i /= 1024;
+                j++;
+            }
+            return i.ToString($"0.00 {suffixes[j]}");
         }
     }
 }
